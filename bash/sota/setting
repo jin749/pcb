@@ -1,0 +1,12 @@
+
+tmux new -s apl2
+
+tmux attach -t apl1
+
+cd /hdd/hdd3/jsh/jinpcb
+conda deactivate 
+conda activate pcb
+clear
+
+rm -rf output/
+bash bash/sota/

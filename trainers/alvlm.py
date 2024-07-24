@@ -23,6 +23,9 @@ from .active_learning.badge import BADGE
 from .active_learning.coreset import Coreset
 from .active_learning.entropy import Entropy
 
+import wandb
+import os
+
 _tokenizer = _Tokenizer()
 
 
@@ -428,6 +431,30 @@ class ALVLM(TrainerX):
         self.close_writer()
         
     def train(self):
+        MODE = None
+        if self.cfg.TRAINER.COOPAL.AEPATH:
+            MODE = "AE"
+        elif self.cfg.TRAINER.COOPAL.ASPATH:
+            MODE = "AS"
+        else:
+            MODE = "none"
+        if self.cfg.WANDB_PROJECT_NAME:
+            wandb.init(
+                project = self.cfg.WANDB_PROJECT_NAME,
+                group = os.path.dirname(self.cfg.OUTPUT_DIR),
+                name = self.cfg.OUTPUT_DIR,
+                config={
+                    "DATASET": self.cfg.DATASET.NAME,
+                    "TRAINER": self.cfg.TRAINER.NAME,
+                    "BACKBONE": self.cfg.MODEL.BACKBONE.NAME,
+                    "ALMETHOD": self.cfg.TRAINER.COOPAL.METHOD,
+                    "MODE": MODE,
+                    "SEED": self.cfg.SEED,
+                    "NUM_SHOTS": 1,
+                    "TARGET_ROUND": 8,
+                }
+            )
+
         """Generic training loops."""
         dataset = build_dataset(self.cfg)
         
@@ -493,6 +520,10 @@ class ALVLM(TrainerX):
                 self.after_epoch()
             self.after_train()
             print("training time for {}-th round: {:.2f} seconds".format(i, time.time() - start))
+
+            if self.cfg.WANDB_PROJECT_NAME:
+                wandb.log({"acc": self.acc[-1], "round": i+1, "total_budget": n_query*(i+1), "round_budget": n_query}, step=n_query*(i+1))
+
         print("=== Result Overview ===")
         for i in range(len(self.acc)):
             print(f"{i}: {self.acc[i]}")
