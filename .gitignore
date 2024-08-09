@@ -1,5 +1,5 @@
-APL/output/
-APL/DATA/
-APL/wandb/
-Dassl.pytorch/dassl.egg-info/PKG-INFO
+output/
+wandb/
+logs/
+bash/
 *.pyc
