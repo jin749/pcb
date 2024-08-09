@@ -109,6 +109,7 @@ def extend_cfg(cfg):
     cfg.DATASET.SUBSAMPLE_CLASSES = "all"  # all, base or new
     
     cfg.WANDB_PROJECT_NAME = None
+    cfg.WANDB_ENTITY = None
 
 def setup_cfg(args):
     cfg = get_cfg_default()

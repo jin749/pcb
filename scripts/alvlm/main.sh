@@ -2,12 +2,14 @@
 
 
 WANDB_PROJECT_NAME=None
+WANDB_ENTITY=None
 CSC=False
 
-while getopts w:c: flag
+while getopts n:e:c: flag
 do
     case "${flag}" in
-        w) WANDB_PROJECT_NAME=${OPTARG};;
+        n) WANDB_PROJECT_NAME=${OPTARG};;
+        e) WANDB_ENTITY=${OPTARG};;
         c) CSC=${OPTARG};;
     esac
 done
@@ -49,6 +51,7 @@ do
             TRAINER.COOPAL.METHOD ${ALMETHOD} \
             TRAINER.COOPAL.ASPATH ${DATASET}.json \
             WANDB_PROJECT_NAME ${WANDB_PROJECT_NAME} \
+            WANDB_ENTITY ${WANDB_ENTITY} \
             TRAINER.COOPAL.GAMMA 0.1
     elif [ "$MODE" = "AE" ]; then 
         python train.py \
@@ -65,6 +68,7 @@ do
             TRAINER.COOPAL.METHOD ${ALMETHOD} \
             TRAINER.COOPAL.AEPATH ${DATASET}.json \
             WANDB_PROJECT_NAME ${WANDB_PROJECT_NAME} \
+            WANDB_ENTITY ${WANDB_ENTITY} \
             TRAINER.COOPAL.GAMMA 0.1
     elif [ "$MODE" = "none" ]; then 
         python train.py \
@@ -80,6 +84,7 @@ do
             DATASET.NUM_SHOTS ${SHOTS} \
             TRAINER.COOPAL.METHOD ${ALMETHOD} \
             WANDB_PROJECT_NAME ${WANDB_PROJECT_NAME} \
+            WANDB_ENTITY ${WANDB_ENTITY} \
             TRAINER.COOPAL.GAMMA 0.1
     else 
         echo "MODE should be selected in [none, AS, AE]"

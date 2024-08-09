@@ -441,6 +441,7 @@ class ALVLM(TrainerX):
         if self.cfg.WANDB_PROJECT_NAME:
             wandb.init(
                 project = self.cfg.WANDB_PROJECT_NAME,
+                entity=self.cfg.WANDB_ENTITY,
                 group = os.path.dirname(self.cfg.OUTPUT_DIR),
                 name = self.cfg.OUTPUT_DIR,
                 config={
@@ -452,6 +453,7 @@ class ALVLM(TrainerX):
                     "SEED": self.cfg.SEED,
                     "NUM_SHOTS": 1,
                     "TARGET_ROUND": 8,
+                    "CSC": self.cfg.TRAINER.COOP.CSC,
                 }
             )
 
@@ -470,7 +472,7 @@ class ALVLM(TrainerX):
      
         
         dataset._train_x = []
-        for i in range(8):
+        for i in range(4):
             start = time.time()
             if self.cfg.TRAINER.COOPAL.METHOD == "random" or i ==0:
                 idx = sample(U_index, n_query)

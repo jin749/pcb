@@ -94,38 +94,4 @@ class BADGE(AL):
 
         Q_index = [self.U_index[idx] for idx in selected_indices]
         return Q_index
-    
-    def select_by_filter(self, n_query, **kwargs):
-        unlabeled_features = self.get_grad_features()
-        self.pred = torch.cat(self.pred)
-        
-        pred_idx = []
-        ret_idx = []
-        Q_index = self.k_means_plus_centers(X=unlabeled_features, K=10*n_query)
-        
-        # Q_index = [self.U_index[idx] for idx in selected_indices]
-        
-        for q in Q_index:
-            if int(self.pred[q]) not in pred_idx:
-                pred_idx.append(int(self.pred[q]))
-                ret_idx.append(q)
-                
-        if len(pred_idx) == self.n_class:
-            ret_idx = [self.U_index[idx] for idx in ret_idx]
-            print(f"pred idx(all the classes): {pred_idx}")
-            return ret_idx, None
-        
-        print("Fail to get all the classes!!!")
-        for q in Q_index:
-            if len(ret_idx) == self.n_class:
-                ret_idx = [self.U_index[idx] for idx in ret_idx]
-                print(f"pred idx: {pred_idx}")
-                return ret_idx, None
-            
-            if q not in ret_idx:
-                pred_idx.append(int(self.pred[q]))
-                ret_idx.append(q)
-                
-        raise EnvironmentError
-                
                 
