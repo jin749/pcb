@@ -33,7 +33,8 @@ CTP="end"  # class token position (end or middle)
 NCTX=16  # number of context tokens
 SHOTS=-1  # number of shots (1, 2, 4, 8, 16)
 
-DIR=output/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}/seed${SEED}
+DIR=output/test/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}/seed${SEED}
+rm -rf ${DIR}
 if [ -d "$DIR" ]; then
     echo "Oops! The results exist at ${DIR} (so skip this job)"
 elif [ "$MODE" = "AS" ]; then 

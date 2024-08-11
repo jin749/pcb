@@ -96,6 +96,7 @@ def extend_cfg(cfg):
 
     cfg.TRAINER.COOPAL = CN() 
     cfg.TRAINER.COOPAL.METHOD = ""
+    cfg.TRAINER.COOPAL.WARM_START = False
     cfg.TRAINER.COOPAL.ASPATH = ""
     cfg.TRAINER.COOPAL.AEPATH = ""
     cfg.TRAINER.COOPAL.GAMMA = 0.1

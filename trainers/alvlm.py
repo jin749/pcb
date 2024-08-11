@@ -22,8 +22,11 @@ from .active_learning.pcb import PCB
 from .active_learning.badge import BADGE
 from .active_learning.coreset import Coreset
 from .active_learning.entropy import Entropy
+from .active_learning.warmstart import WarmStart
 
 import wandb
+import contextlib
+import sys
 import os
 
 _tokenizer = _Tokenizer()
@@ -113,7 +116,7 @@ class PromptLearner(nn.Module):
         else:
             name_lens = [len(_tokenizer.encode(name)) for name in classnames]
             prompts = [prompt_prefix + " " + name + "." for name in classnames]
-        print(prompts)
+        print(prompts[:10])
         tokenized_prompts = torch.cat([clip.tokenize(p) for p in prompts])
         with torch.no_grad():
             embedding = clip_model.token_embedding(tokenized_prompts).type(dtype)
@@ -317,7 +320,7 @@ class ALVLM(TrainerX):
             self.model = CustomCLIP(cfg, classnames, clip_model, desc_file=cfg.TRAINER.COOPAL.AEPATH)
         else:
             self.model = CustomCLIP(cfg, classnames, clip_model)
-        print(self.model)
+        #print(self.model)
         
         print("Turning off gradients in both the image and the text encoder")
         for name, param in self.model.named_parameters():
@@ -342,7 +345,7 @@ class ALVLM(TrainerX):
         if device_count > 1:
             print(f"Multiple GPUs detected (n_gpus={device_count}), use all of them!")
             self.model = nn.DataParallel(self.model)
-            print(self.model)
+            #print(self.model)
 
     def forward_backward(self, batch):
         image, label = self.parse_batch_train(batch)
@@ -469,13 +472,17 @@ class ALVLM(TrainerX):
             n_query = dataset.get_num_classes(unlabeled_dst)
         n_cand = int(len(unlabeled_dst) * self.cfg.TRAINER.COOPAL.GAMMA) # 10% of entire dataset
         
-     
-        
         dataset._train_x = []
-        for i in range(4):
+        for i in range(8):
             start = time.time()
             if self.cfg.TRAINER.COOPAL.METHOD == "random" or i ==0:
                 idx = sample(U_index, n_query)
+            if self.cfg.TRAINER.COOPAL.WARM_START == True and i == 0:
+                with verbose(False):
+                    self.before_train()
+                print("\n\n Warm Start \n\n")
+                selector = WarmStart(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
+                idx = selector.select(n_query)
             elif self.cfg.TRAINER.COOPAL.METHOD == "entropy":
                 selector = Entropy(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
                 idx = selector.select(n_cand)
@@ -514,7 +521,7 @@ class ALVLM(TrainerX):
                 is_train=True,
                 dataset_wrapper=None
             )   
-            # self.model.train()
+
             self.before_train()
             for self.epoch in range(self.start_epoch, self.max_epoch):
                 self.before_epoch()
@@ -530,4 +537,17 @@ class ALVLM(TrainerX):
         for i in range(len(self.acc)):
             print(f"{i}: {self.acc[i]}")
         print("=======================")    
+
             
+@contextlib.contextmanager
+def verbose(verbose=False):
+    class DummyFile(object):
+        def write(self, x): pass
+
+    if not verbose:
+        save_stdout = sys.stdout
+        sys.stdout = DummyFile()
+        yield
+        sys.stdout = save_stdout
+    else:
+        yield

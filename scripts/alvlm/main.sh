@@ -3,14 +3,16 @@
 
 WANDB_PROJECT_NAME=None
 WANDB_ENTITY=None
-CSC=False
+WARM_START=False
+CSC=True
 
-while getopts n:e:c: flag
+while getopts n:e:c:w: flag
 do
     case "${flag}" in
         n) WANDB_PROJECT_NAME=${OPTARG};;
         e) WANDB_ENTITY=${OPTARG};;
         c) CSC=${OPTARG};;
+        w) WARM_START=${OPTARG};;
     esac
 done
 
@@ -33,7 +35,7 @@ SHOTS=-1  # number of shots (1, 2, 4, 8, 16)
 
 for SEED in 1 2 3
 do
-    DIR=output/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}/seed${SEED}
+    DIR=output/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}/seed${SEED}
     if [ -d "$DIR" ]; then
         echo "Oops! The results exist at ${DIR} (so skip this job)"
     elif [ "$MODE" = "AS" ]; then 
@@ -50,6 +52,7 @@ do
             DATASET.NUM_SHOTS ${SHOTS} \
             TRAINER.COOPAL.METHOD ${ALMETHOD} \
             TRAINER.COOPAL.ASPATH ${DATASET}.json \
+            TRAINER.COOPAL.WARM_START ${WARM_START} \
             WANDB_PROJECT_NAME ${WANDB_PROJECT_NAME} \
             WANDB_ENTITY ${WANDB_ENTITY} \
             TRAINER.COOPAL.GAMMA 0.1
@@ -67,6 +70,7 @@ do
             DATASET.NUM_SHOTS ${SHOTS} \
             TRAINER.COOPAL.METHOD ${ALMETHOD} \
             TRAINER.COOPAL.AEPATH ${DATASET}.json \
+            TRAINER.COOPAL.WARM_START ${WARM_START} \
             WANDB_PROJECT_NAME ${WANDB_PROJECT_NAME} \
             WANDB_ENTITY ${WANDB_ENTITY} \
             TRAINER.COOPAL.GAMMA 0.1
@@ -83,6 +87,7 @@ do
             TRAINER.COOP.CLASS_TOKEN_POSITION ${CTP} \
             DATASET.NUM_SHOTS ${SHOTS} \
             TRAINER.COOPAL.METHOD ${ALMETHOD} \
+            TRAINER.COOPAL.WARM_START ${WARM_START} \
             WANDB_PROJECT_NAME ${WANDB_PROJECT_NAME} \
             WANDB_ENTITY ${WANDB_ENTITY} \
             TRAINER.COOPAL.GAMMA 0.1
