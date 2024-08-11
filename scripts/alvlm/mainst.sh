@@ -4,15 +4,21 @@
 WANDB_PROJECT_NAME=None
 WANDB_ENTITY=None
 WARM_START=False
+FILTER=False # only for mode AS
+FILTER_LR=None # only for mode AS
+ALMETHOD_FOR_FILTER=False # only for mode AS
 CSC=True
 
-while getopts n:e:c:w: flag
+while getopts n:e:c:w:f:l:a: flag
 do
     case "${flag}" in
         n) WANDB_PROJECT_NAME=${OPTARG};;
         e) WANDB_ENTITY=${OPTARG};;
         c) CSC=${OPTARG};;
         w) WARM_START=${OPTARG};;
+        f) FILTER=${OPTARG};;
+        l) FILTER_LR=${OPTARG};;
+        a) ALMETHOD_FOR_FILTER=${OPTARG};;
     esac
 done
 
@@ -26,6 +32,7 @@ ALMETHOD=$3 # Active learning method (random, entropy, coreset, badge)
 MODE=$4 # [none, AS, AE]
 SEED=$5
 
+
 DATA=/hdd/hdd3/jsh/DATA 
 
 TRAINER=ALVLM
@@ -33,7 +40,8 @@ CTP="end"  # class token position (end or middle)
 NCTX=16  # number of context tokens
 SHOTS=-1  # number of shots (1, 2, 4, 8, 16)
 
-DIR=output/test/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}/seed${SEED}
+
+DIR=output/test/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_LR}_filtermethod${ALMETHOD_FOR_FILTER}/seed${SEED}
 rm -rf ${DIR}
 if [ -d "$DIR" ]; then
     echo "Oops! The results exist at ${DIR} (so skip this job)"
@@ -52,6 +60,9 @@ elif [ "$MODE" = "AS" ]; then
         TRAINER.COOPAL.METHOD ${ALMETHOD} \
         TRAINER.COOPAL.ASPATH ${DATASET}.json \
         TRAINER.COOPAL.WARM_START ${WARM_START} \
+        TRAINER.COOPAL.FILTER ${FILTER} \
+        TRAINER.COOPAL.FILTER_LR ${FILTER_LR} \
+        TRAINER.COOPAL.ALMETHOD_FOR_FILTER ${ALMETHOD_FOR_FILTER} \
         WANDB_PROJECT_NAME ${WANDB_PROJECT_NAME} \
         WANDB_ENTITY ${WANDB_ENTITY} \
         TRAINER.COOPAL.GAMMA 0.1

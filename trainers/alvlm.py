@@ -23,6 +23,8 @@ from .active_learning.badge import BADGE
 from .active_learning.coreset import Coreset
 from .active_learning.entropy import Entropy
 from .active_learning.warmstart import WarmStart
+from .active_learning.badge_for_filter import BADGE as F_BADGE
+from .active_learning.coreset_for_filter import Coreset as F_Coreset
 
 import wandb
 import contextlib
@@ -88,7 +90,6 @@ class PromptLearner(nn.Module):
         prompt_prefix = " ".join(["X"] * n_ctx)
         
         classnames = [name.replace("_", " ") for name in classnames]
-        n_desc_per_cls = None
         if cfg.TRAINER.COOPAL.ASPATH:
             with open(f"descriptors/descriptors_{cfg.TRAINER.COOPAL.ASPATH}", "r") as f:
                 desc_dict = json.load(f)
@@ -116,6 +117,7 @@ class PromptLearner(nn.Module):
         else:
             name_lens = [len(_tokenizer.encode(name)) for name in classnames]
             prompts = [prompt_prefix + " " + name + "." for name in classnames]
+        self.prompts = prompts
         print(prompts[:10])
         tokenized_prompts = torch.cat([clip.tokenize(p) for p in prompts])
         with torch.no_grad():
@@ -224,10 +226,41 @@ class PromptLearner(nn.Module):
             raise ValueError
 
         return prompts
+    
+
+class WeightedSumOfLogits(nn.Module):
+    def __init__(self, n_class_desc, dtype, weighted_sum_weight=None):
+        super().__init__()
+        self.n_class_desc = n_class_desc
+        
+        if weighted_sum_weight is None:
+            initial_weighted_sum_weight = []
+            for n in self.n_class_desc:
+                initial_weighted_sum_weight.extend([1/n] * n)
+            self.w = nn.Parameter(torch.tensor(initial_weighted_sum_weight, dtype=dtype))
+
+        else:
+            self.w = nn.Parameter(weighted_sum_weight)
+            
+    def forward(self, augmented_logits):
+        weighted_sum_logits = []
+        start = 0
+        for n in self.n_class_desc:
+            same_class_logits = augmented_logits[:, start: start + n]
+            same_class_softmaxed_weight = F.softmax(self.w[start: start + n], dim=0)
+            weighted_sum_logit = same_class_logits @ same_class_softmaxed_weight
+
+            weighted_sum_logits.append(weighted_sum_logit)
+            start += n
+        
+        weighted_sum_logits = torch.stack(weighted_sum_logits, dim=1)
+        
+        return weighted_sum_logits
+    
 
 
 class CustomCLIP(nn.Module):
-    def __init__(self, cfg, classnames, clip_model, desc_file=None):
+    def __init__(self, cfg, classnames, clip_model, desc_file=None, weighted_sum_weight=None):
         super().__init__()
         
         self.prompt_learner = PromptLearner(cfg, classnames, clip_model)
@@ -240,7 +273,7 @@ class CustomCLIP(nn.Module):
         self.n_class_desc=[]
         self.n_cls = len(classnames)
         self.cfg = cfg
-        
+
         if desc_file is not None:
             with open(f"descriptors/descriptors_{desc_file}", "r") as f:
                 desc_dict = json.load(f)
@@ -249,6 +282,10 @@ class CustomCLIP(nn.Module):
             for name in classnames:
                 name = name.lower()
                 self.n_class_desc.append(len(desc_dict[name]))
+
+        self.weighted_sum_weight = weighted_sum_weight
+        self.weighted_sum = WeightedSumOfLogits(self.n_class_desc, self.dtype, self.weighted_sum_weight)
+        
             
         
     def forward(self, image, get_feature=False):
@@ -256,7 +293,6 @@ class CustomCLIP(nn.Module):
         
         prompts = self.prompt_learner()
         tokenized_prompts = self.tokenized_prompts
-        
     
         text_features = self.text_encoder(prompts, tokenized_prompts)
         
@@ -274,13 +310,16 @@ class CustomCLIP(nn.Module):
         logit_scale = self.logit_scale.exp()
         logits = logit_scale * image_features @ text_features.t()
         
-        if self.cfg.TRAINER.COOPAL.ASPATH:
-            tmp = [] 
-            start = 0
-            for n in self.n_class_desc:
-                tmp.append(torch.sum(logits[:, start:start+n], dim=1)/n)
-                start += n
-            logits = torch.stack(tmp, dim=1)
+        if self.cfg.TRAINER.COOPAL.ASPATH: 
+            if self.cfg.TRAINER.COOPAL.FILTER: # TODO: filter
+                logits = self.weighted_sum(logits)
+            else:
+                tmp = [] 
+                start = 0
+                for n in self.n_class_desc:
+                    tmp.append(torch.sum(logits[:, start:start+n], dim=1)/n)
+                    start += n
+                logits = torch.stack(tmp, dim=1)
 
         if get_feature:
             return logits, image_features
@@ -302,7 +341,7 @@ class ALVLM(TrainerX):
     def check_cfg(self, cfg):
         assert cfg.TRAINER.COOP.PREC in ["fp16", "fp32", "amp"]
 
-    def build_model(self):
+    def build_model(self, weighted_sum_weight=None):
         cfg = self.cfg
         classnames = self.dm.dataset.classnames
 
@@ -315,7 +354,7 @@ class ALVLM(TrainerX):
 
         print("Building custom CLIP")
         if cfg.TRAINER.COOPAL.ASPATH:
-            self.model = CustomCLIP(cfg, classnames, clip_model, desc_file=cfg.TRAINER.COOPAL.ASPATH)
+            self.model = CustomCLIP(cfg, classnames, clip_model, desc_file=cfg.TRAINER.COOPAL.ASPATH, weighted_sum_weight=weighted_sum_weight)
         elif cfg.TRAINER.COOPAL.AEPATH:
             self.model = CustomCLIP(cfg, classnames, clip_model, desc_file=cfg.TRAINER.COOPAL.AEPATH)
         else:
@@ -324,7 +363,7 @@ class ALVLM(TrainerX):
         
         print("Turning off gradients in both the image and the text encoder")
         for name, param in self.model.named_parameters():
-            if "prompt_learner" not in name:
+            if "prompt_learner" not in name and "weighted_sum" not in name:
                 param.requires_grad_(False)
 
         if cfg.MODEL.INIT_WEIGHTS:
@@ -332,10 +371,14 @@ class ALVLM(TrainerX):
 
         self.model.to(self.device)
         
-        # NOTE: only give prompt_learner to the optimizer
         self.optim = build_optimizer(self.model.prompt_learner, cfg.OPTIM)
         self.sched = build_lr_scheduler(self.optim, cfg.OPTIM)
         self.register_model(f"prompt_learner", self.model.prompt_learner, self.optim, self.sched)
+
+        filter_optim_cfg = get_filter_optim_cfg(cfg)
+        self.filter_optim = build_optimizer(self.model.weighted_sum, filter_optim_cfg)
+        self.filter_sched = build_lr_scheduler(self.filter_optim, filter_optim_cfg)
+        self.register_model("weighted_sum", self.model.weighted_sum, self.filter_optim, self.filter_sched)
 
         self.scaler = GradScaler() if cfg.TRAINER.COOP.PREC == "amp" else None
 
@@ -415,9 +458,9 @@ class ALVLM(TrainerX):
             # set strict=False
             self._models[name].load_state_dict(state_dict, strict=False)
     
-    def before_train(self):
+    def before_train(self, weighted_sum_weight=None):
         print("INITIALIZE the prompts weights")
-        self.build_model()
+        self.build_model(weighted_sum_weight)
         
     def after_train(self):
         print("Finish training")
@@ -435,6 +478,7 @@ class ALVLM(TrainerX):
         
     def train(self):
         MODE = None
+        TARGET_ROUND = 8
         if self.cfg.TRAINER.COOPAL.AEPATH:
             MODE = "AE"
         elif self.cfg.TRAINER.COOPAL.ASPATH:
@@ -453,9 +497,13 @@ class ALVLM(TrainerX):
                     "BACKBONE": self.cfg.MODEL.BACKBONE.NAME,
                     "ALMETHOD": self.cfg.TRAINER.COOPAL.METHOD,
                     "MODE": MODE,
+                    "WARM_START": self.cfg.TRAINER.COOPAL.WARM_START,
+                    "FILTER": self.cfg.TRAINER.COOPAL.FILTER,
+                    "FILTER_LR": self.cfg.TRAINER.COOPAL.FILTER_LR,
+                    "ALMETHOD_FOR_FILTER": self.cfg.TRAINER.COOPAL.ALMETHOD_FOR_FILTER,
                     "SEED": self.cfg.SEED,
                     "NUM_SHOTS": 1,
-                    "TARGET_ROUND": 8,
+                    "TARGET_ROUND": TARGET_ROUND,
                     "CSC": self.cfg.TRAINER.COOP.CSC,
                 }
             )
@@ -473,26 +521,38 @@ class ALVLM(TrainerX):
         n_cand = int(len(unlabeled_dst) * self.cfg.TRAINER.COOPAL.GAMMA) # 10% of entire dataset
         
         dataset._train_x = []
-        for i in range(8):
+        weighted_sum_weight = None
+        for i in range(TARGET_ROUND):
             start = time.time()
             if self.cfg.TRAINER.COOPAL.METHOD == "random" or i ==0:
                 idx = sample(U_index, n_query)
             if self.cfg.TRAINER.COOPAL.WARM_START == True and i == 0:
-                with verbose(False):
-                    self.before_train()
+                self.before_train()
                 print("\n\n Warm Start \n\n")
                 selector = WarmStart(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
                 idx = selector.select(n_query)
+
             elif self.cfg.TRAINER.COOPAL.METHOD == "entropy":
                 selector = Entropy(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
                 idx = selector.select(n_cand)
+
             elif self.cfg.TRAINER.COOPAL.METHOD == "badge":
-                selector = BADGE(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
+                if self.cfg.TRAINER.COOPAL.ALMETHOD_FOR_FILTER:
+                    print("\n\n BADGE FOR FILTER \n\n")
+                    selector = F_BADGE(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
+                else:
+                    selector = BADGE(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
                 idx = selector.select(n_cand)
+
             elif self.cfg.TRAINER.COOPAL.METHOD == "coreset":
                 val_x = dataset._train_x.copy()
-                selector = Coreset(self.cfg, self.model, unlabeled_dst, U_index, val_x, dataset.get_num_classes(unlabeled_dst))
+                if self.cfg.TRAINER.COOPAL.ALMETHOD_FOR_FILTER:
+                    print("\n\n CORESET FOR FILTER \n\n")
+                    selector = F_Coreset(self.cfg, self.model, unlabeled_dst, U_index, val_x, dataset.get_num_classes(unlabeled_dst))
+                else:
+                    selector = Coreset(self.cfg, self.model, unlabeled_dst, U_index, val_x, dataset.get_num_classes(unlabeled_dst))
                 idx = selector.select(n_cand)
+
             else:
                 print("NotImplementedError")
                 idx = U_index
@@ -504,7 +564,6 @@ class ALVLM(TrainerX):
                 selector = PCB(self.cfg, self.model, unlabeled_dst, idx, dataset.get_num_classes(unlabeled_dst), statistics, self.device)
                 idx = selector.select(n_query)
             
-            # Filtering 
             for k in idx:
                 dataset._train_x.append(unlabeled_dst[k])
                 U_index.remove(k)
@@ -522,13 +581,26 @@ class ALVLM(TrainerX):
                 dataset_wrapper=None
             )   
 
-            self.before_train()
+            self.before_train(weighted_sum_weight) # build model
+
+            print("\n\n=== Start training ===")
+            if torch.cuda.device_count() > 1:
+                model_for_eval = self.model.module
+            else:
+                model_for_eval = self.model
+
+            print_filter(model_for_eval)
             for self.epoch in range(self.start_epoch, self.max_epoch):
                 self.before_epoch()
                 self.run_epoch()
                 self.after_epoch()
             self.after_train()
-            print("training time for {}-th round: {:.2f} seconds".format(i, time.time() - start))
+
+            print("\n\n=== End training ===")
+            print_filter(model_for_eval)
+            weighted_sum_weight = model_for_eval.weighted_sum.w.detach()
+
+            print("\nTraining time for {}-th round: {:.2f} seconds".format(i, time.time() - start))
 
             if self.cfg.WANDB_PROJECT_NAME:
                 wandb.log({"acc": self.acc[-1], "round": i+1, "total_budget": n_query*(i+1), "round_budget": n_query}, step=n_query*(i+1))
@@ -538,16 +610,47 @@ class ALVLM(TrainerX):
             print(f"{i}: {self.acc[i]}")
         print("=======================")    
 
-            
-@contextlib.contextmanager
-def verbose(verbose=False):
-    class DummyFile(object):
-        def write(self, x): pass
 
-    if not verbose:
-        save_stdout = sys.stdout
-        sys.stdout = DummyFile()
-        yield
-        sys.stdout = save_stdout
-    else:
-        yield
+def get_filter_optim_cfg(cfg):
+    from yacs.config import CfgNode as CN
+
+    filter_optim = CN(cfg.OPTIM)
+    filter_optim.NAME = "sgd"
+
+    if cfg.TRAINER.COOPAL.FILTER_LR:
+        filter_optim.LR = cfg.TRAINER.COOPAL.FILTER_LR
+
+    for k, v in cfg.OPTIM.items():
+        if k not in filter_optim.keys():
+            filter_optim[k] = v
+
+    print("\n\nFilter Optimizer Config: ")
+    print(filter_optim)
+
+    return filter_optim
+
+
+def print_filter(model,num_of_displayed_class=5):
+    n_class_desc = model.n_class_desc
+    prompts = model.prompt_learner.prompts
+    weighted_sum_weight = model.weighted_sum.w.detach()
+
+    start = 0
+    softmaxed_weight = []
+    start = 0
+    for n in n_class_desc:
+        same_class_softmaxed_weight = torch.nn.functional.softmax(weighted_sum_weight[start: start + n], dim=0)
+        softmaxed_weight.extend(same_class_softmaxed_weight)
+        start += n
+    
+    print("\n\n <Filtered descriptions>")
+    print("[weight]\t[softmaxed weight] * [description]")
+    start = 0
+    displayed_class = 0
+    for n in n_class_desc:
+        for i in range(n):
+            print(f"{weighted_sum_weight[start + i].item():.4f}\t\t{softmaxed_weight[start + i].tolist():.4f} * \"{prompts[start + i]}\"")
+        start += n
+        displayed_class += 1
+        if displayed_class >= num_of_displayed_class:
+            break

@@ -97,6 +97,9 @@ def extend_cfg(cfg):
     cfg.TRAINER.COOPAL = CN() 
     cfg.TRAINER.COOPAL.METHOD = ""
     cfg.TRAINER.COOPAL.WARM_START = False
+    cfg.TRAINER.COOPAL.FILTER = False
+    cfg.TRAINER.COOPAL.FILTER_LR = None
+    cfg.TRAINER.COOPAL.ALMETHOD_FOR_FILTER = False
     cfg.TRAINER.COOPAL.ASPATH = ""
     cfg.TRAINER.COOPAL.AEPATH = ""
     cfg.TRAINER.COOPAL.GAMMA = 0.1
@@ -108,9 +111,11 @@ def extend_cfg(cfg):
     cfg.TRAINER.MAPLE.PREC = "fp16"  # fp16, fp32, amp
     cfg.TRAINER.MAPLE.PROMPT_DEPTH = 9 # Max 12, minimum 0, for 1 it will act as shallow MaPLe (J=1)
     cfg.DATASET.SUBSAMPLE_CLASSES = "all"  # all, base or new
-    
+
     cfg.WANDB_PROJECT_NAME = None
     cfg.WANDB_ENTITY = None
+
+
 
 def setup_cfg(args):
     cfg = get_cfg_default()
