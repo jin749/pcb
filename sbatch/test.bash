@@ -23,11 +23,11 @@ FILTER_OPTIM_NAME=sgd
 ALMETHOD_FOR_FILTER=False
 CSC=True
 
-DATASET=(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $1}' $config)
+DATASET=$(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $1}' $config)
 CFG=vit_b32
-ALMETHOD=(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $2}' $config)
+ALMETHOD=$(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $2}' $config)
 MODE=AS
-SEED=(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $4}' $config)
+SEED=$(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $4}' $config)
 
 
 DATA=/home/jin749/DATA
