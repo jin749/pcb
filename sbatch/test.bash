@@ -2,13 +2,13 @@
 
 #SBATCH -J dtd_eurosat       # name of job
 #SBATCH -c 4                        # number of cpus required per task
-#SBATCH -a 1-9                      # job array index values
+#SBATCH -a 1-156                    # job array index values
 #SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
-#SBATCH -t 0-03:00:00               # time limit
+#SBATCH -t 0-05:00:00               # time limit
 #SBATCH -o /home/jin749/jinpcb/sbatch/slogs/dtd_eurosat_%A_%a.out    # file for batch script's standard output
 #SBATCH -p A5000                    # partition requested
 
-#SBATCH --mem-per-gpu=10G           # memory required per allocated GPU
+#SBATCH --mem-per-gpu=20G           # memory required per allocated GPU
 #SBATCH --gres=gpu:1                # number of gpus required
 #SBATCH --partition=A5000           
 
@@ -19,7 +19,7 @@ WANDB_ENTITY=apl_postech
 WARM_START=True
 FILTER=True
 FILTER_LR=$(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $3}' $config)
-FILTER_OPTIM_NAME=sgd
+FILTER_OPTIM_NAME=adam
 ALMETHOD_FOR_FILTER=False
 CSC=True
 
