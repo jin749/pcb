@@ -5,9 +5,12 @@
 #SBATCH -a 1-9                      # job array index values
 #SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
 #SBATCH -t 0-03:00:00               # time limit
+#SBATCH -o /home/jin749/jinpcb/sbatch/slogs/dtd_eurosat_%A_%a.out    # file for batch script's standard output
+#SBATCH -p A5000                    # partition requested
 
 #SBATCH --mem-per-gpu=10G           # memory required per allocated GPU
 #SBATCH --gres=gpu:1                # number of gpus required
+#SBATCH --partition=A5000           
 
 config=sbatch/config
 
