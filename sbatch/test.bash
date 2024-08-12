@@ -1,41 +1,33 @@
 #!/bin/bash
 
+#SBATCH -J dtd_eurosat       # name of job
+#SBATCH -c 4                        # number of cpus required per task
+#SBATCH -a 1-9                      # job array index values
+#SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
+#SBATCH -t 0-03:00:00               # time limit
 
-WANDB_PROJECT_NAME=None
-WANDB_ENTITY=None
-WARM_START=False
-FILTER=False # only for mode AS
-FILTER_LR=None # only for mode AS
-FILTER_OPTIM_NAME=sgd # only for mode AS
-ALMETHOD_FOR_FILTER=False # only for mode AS
+#SBATCH --mem-per-gpu=10G           # memory required per allocated GPU
+#SBATCH --gres=gpu:1                # number of gpus required
+
+config=sbatch/config
+
+WANDB_PROJECT_NAME=entropy_filterlr_adam
+WANDB_ENTITY=apl_postech
+WARM_START=True
+FILTER=True
+FILTER_LR=$(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $3}' $config)
+FILTER_OPTIM_NAME=sgd
+ALMETHOD_FOR_FILTER=False
 CSC=True
 
-while getopts n:e:c:w:f:l:m:o: flag
-do
-    case "${flag}" in
-        n) WANDB_PROJECT_NAME=${OPTARG};;
-        e) WANDB_ENTITY=${OPTARG};;
-        c) CSC=${OPTARG};;
-        w) WARM_START=${OPTARG};;
-        f) FILTER=${OPTARG};;
-        l) FILTER_LR=${OPTARG};;
-        m) ALMETHOD_FOR_FILTER=${OPTARG};;
-        o) FILTER_OPTIM_NAME=${OPTARG};;
-    esac
-done
-
-shift $((OPTIND-1))
+DATASET=(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $1}' $config)
+CFG=vit_b32
+ALMETHOD=(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $2}' $config)
+MODE=AS
+SEED=(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $4}' $config)
 
 
-# custom config
-DATASET=$1
-CFG=$2  # config file
-ALMETHOD=$3 # Active learning method (random, entropy, coreset, badge)
-MODE=$4 # [none, AS, AE]
-SEED=$5
-
-
-DATA=/hdd/hdd3/jsh/DATA 
+DATA=/home/jin749/DATA
 
 TRAINER=ALVLM
 CTP="end"  # class token position (end or middle)
@@ -43,8 +35,7 @@ NCTX=16  # number of context tokens
 SHOTS=-1  # number of shots (1, 2, 4, 8, 16)
 
 
-DIR=output/test/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_OPTIM_NAME}${FILTER_LR}_filtermethod${ALMETHOD_FOR_FILTER}/seed${SEED}
-rm -rf ${DIR}
+DIR=output/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_OPTIM_NAME}${FILTER_LR}_filtermethod${ALMETHOD_FOR_FILTER}/seed${SEED}
 if [ -d "$DIR" ]; then
     echo "Oops! The results exist at ${DIR} (so skip this job)"
 elif [ "$MODE" = "AS" ]; then 

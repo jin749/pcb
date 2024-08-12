@@ -6,10 +6,11 @@ WANDB_ENTITY=None
 WARM_START=False
 FILTER=False # only for mode AS
 FILTER_LR=None # only for mode AS
+FILTER_OPTIM_NAME=sgd # only for mode AS
 ALMETHOD_FOR_FILTER=False # only for mode AS
 CSC=True
 
-while getopts n:e:c:w:f:l:a: flag
+while getopts n:e:c:w:f:l:m:o: flag
 do
     case "${flag}" in
         n) WANDB_PROJECT_NAME=${OPTARG};;
@@ -18,7 +19,8 @@ do
         w) WARM_START=${OPTARG};;
         f) FILTER=${OPTARG};;
         l) FILTER_LR=${OPTARG};;
-        a) ALMETHOD_FOR_FILTER=${OPTARG};;
+        m) ALMETHOD_FOR_FILTER=${OPTARG};;
+        o) FILTER_OPTIM_NAME=${OPTARG};;
     esac
 done
 
@@ -41,7 +43,7 @@ NCTX=16  # number of context tokens
 SHOTS=-1  # number of shots (1, 2, 4, 8, 16)
 
 
-DIR=output/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_LR}_filtermethod${ALMETHOD_FOR_FILTER}/seed${SEED}
+DIR=output/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_OPTIM_NAME}${FILTER_LR}_filtermethod${ALMETHOD_FOR_FILTER}/seed${SEED}
 if [ -d "$DIR" ]; then
     echo "Oops! The results exist at ${DIR} (so skip this job)"
 elif [ "$MODE" = "AS" ]; then 
@@ -61,6 +63,7 @@ elif [ "$MODE" = "AS" ]; then
         TRAINER.COOPAL.WARM_START ${WARM_START} \
         TRAINER.COOPAL.FILTER ${FILTER} \
         TRAINER.COOPAL.FILTER_LR ${FILTER_LR} \
+        TRAINER.COOPAL.FILTER_OPTIM_NAME ${FILTER_OPTIM_NAME} \
         TRAINER.COOPAL.ALMETHOD_FOR_FILTER ${ALMETHOD_FOR_FILTER} \
         WANDB_PROJECT_NAME ${WANDB_PROJECT_NAME} \
         WANDB_ENTITY ${WANDB_ENTITY} \

@@ -499,6 +499,7 @@ class ALVLM(TrainerX):
                     "MODE": MODE,
                     "WARM_START": self.cfg.TRAINER.COOPAL.WARM_START,
                     "FILTER": self.cfg.TRAINER.COOPAL.FILTER,
+                    "FILTER_OPTIM_NAME": self.cfg.TRAINER.COOPAL.FILTER_OPTIM_NAME,
                     "FILTER_LR": self.cfg.TRAINER.COOPAL.FILTER_LR,
                     "ALMETHOD_FOR_FILTER": self.cfg.TRAINER.COOPAL.ALMETHOD_FOR_FILTER,
                     "SEED": self.cfg.SEED,
@@ -615,7 +616,7 @@ def get_filter_optim_cfg(cfg):
     from yacs.config import CfgNode as CN
 
     filter_optim = CN(cfg.OPTIM)
-    filter_optim.NAME = "sgd"
+    filter_optim.NAME = cfg.TRAINER.COOPAL.FILTER_OPTIM_NAME
 
     if cfg.TRAINER.COOPAL.FILTER_LR:
         filter_optim.LR = cfg.TRAINER.COOPAL.FILTER_LR
@@ -630,7 +631,7 @@ def get_filter_optim_cfg(cfg):
     return filter_optim
 
 
-def print_filter(model,num_of_displayed_class=5):
+def print_filter(model,num_of_displayed_class=10):
     n_class_desc = model.n_class_desc
     prompts = model.prompt_learner.prompts
     weighted_sum_weight = model.weighted_sum.w.detach()

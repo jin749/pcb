@@ -99,6 +99,7 @@ def extend_cfg(cfg):
     cfg.TRAINER.COOPAL.WARM_START = False
     cfg.TRAINER.COOPAL.FILTER = False
     cfg.TRAINER.COOPAL.FILTER_LR = None
+    cfg.TRAINER.COOPAL.FILTER_OPTIM_NAME = 'sgd'
     cfg.TRAINER.COOPAL.ALMETHOD_FOR_FILTER = False
     cfg.TRAINER.COOPAL.ASPATH = ""
     cfg.TRAINER.COOPAL.AEPATH = ""
