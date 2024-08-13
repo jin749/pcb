@@ -525,9 +525,10 @@ class ALVLM(TrainerX):
         weighted_sum_weight = None
         for i in range(TARGET_ROUND):
             start = time.time()
-            if self.cfg.TRAINER.COOPAL.METHOD == "random" or i ==0:
+            if self.cfg.TRAINER.COOPAL.METHOD == "random" or (self.cfg.TRAINER.COOPAL.WARM_START == False) and i == 0:
                 idx = sample(U_index, n_query)
-            if self.cfg.TRAINER.COOPAL.WARM_START == True and i == 0:
+                
+            elif self.cfg.TRAINER.COOPAL.WARM_START == True and i == 0:
                 self.before_train()
                 print("\n\n Warm Start \n\n")
                 selector = WarmStart(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
