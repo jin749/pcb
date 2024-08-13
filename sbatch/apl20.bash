@@ -1,33 +1,32 @@
 #!/bin/bash
 
-#SBATCH -J dtd_eurosat              # name of job
+#SBATCH -J nowarm_filterlr_small    # name of job
 #SBATCH -c 4                        # number of cpus required per task
-#SBATCH -a 1-54                     # job array index values
+#SBATCH -a 1-108                    # job array index values
 #SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
-#SBATCH -t 0-05:00:00               # time limit
+#SBATCH -t 0-04:00:00               # time limit
 #SBATCH -o /home/jin749/jinpcb/sbatch/slogs/dtd_eurosat_%A_%a.out    # file for batch script's standard output
 #SBATCH -p A5000                    # partition requested
 
 #SBATCH --mem-per-gpu=20G           # memory required per allocated GPU
 #SBATCH --gres=gpu:1                # number of gpus required
-#SBATCH --partition=A5000           
 
-config=sbatch/config20
+config=sbatch/config20.csv
 
-WARM_START=True
+WARM_START=False
 FILTER=True
-FILTER_LR=$(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $3}' $config)
+FILTER_LR=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $3}' $config)
 FILTER_OPTIM_NAME=sgd
 ALMETHOD_FOR_FILTER=False
 CSC=True
 
-DATASET=$(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $1}' $config)
+DATASET=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $1}' $config)
 CFG=vit_b32
-ALMETHOD=$(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $2}' $config)
+ALMETHOD=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $2}' $config)
 MODE=AS
-SEED=$(awk -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $4}' $config)
+SEED=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $4}' $config)
 
-WANDB_PROJECT_NAME=${ALMETHOD}_filter
+WANDB_PROJECT_NAME=${ALMETHOD}_warm${WARM_START}_filter${FILTER}
 WANDB_ENTITY=apl_postech
 
 
