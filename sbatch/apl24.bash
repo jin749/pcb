@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -J nowarm_filterlr_small    # name of job
+#SBATCH -J nowarm_filterlr_small2    # name of job
 #SBATCH -c 8                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
 #SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
@@ -11,10 +11,10 @@
 #SBATCH --mem-per-gpu=24G           # memory required per allocated GPU
 #SBATCH -t 0-05:00:00               # time limit
 #SBATCH -p A5000                    # partition requested
-#SBATCH -a 1-6                      # job array index values
+#SBATCH -a 1-108                      # job array index values
 source /home/jin749/.bashrc
 conda activate pcb
-config=/home/jin749/jinpcb/sbatch/failed.csv
+config=/home/jin749/jinpcb/sbatch/config24.csv
 
 echo JOB_ID: ${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID} && echo
 echo pwd: 
