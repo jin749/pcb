@@ -3,20 +3,21 @@
 #SBATCH -J nowarm_filterlr_big      # name of job
 #SBATCH -c 4                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
+#SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
 #SBATCH -o /home/jin749/jinpcb/sbatch/slogs/%x_%A_%a.out    # file for batch script's standard output
 
 #SBATCH --mem-per-gpu=40G           # memory required per allocated GPU
 #SBATCH -t 0-16:00:00               # time limit
 #SBATCH -p A6000                    # partition requested
-#SBATCH -a 1-6                      # job array index values
+#SBATCH -a 1-3                      # job array index values
 source /home/jin749/.bashrc
 conda activate pcb
 config=/home/jin749/jinpcb/sbatch/failed2.csv
 
+echo pwd:
+srun pwd
 echo which python:
 srun which python
-echo which conda:
-srun which conda
 
 WARM_START=False
 FILTER=True

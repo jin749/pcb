@@ -3,6 +3,7 @@
 #SBATCH -J nowarm_filterlr_small    # name of job
 #SBATCH -c 4                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
+#SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
 #SBATCH -o /home/jin749/jinpcb/sbatch/slogs/%x_%A_%a.out    # file for batch script's standard output
 
 #SBATCH --mem-per-gpu=24G           # memory required per allocated GPU
@@ -13,10 +14,10 @@ source /home/jin749/.bashrc
 conda activate pcb
 config=/home/jin749/jinpcb/sbatch/failed.csv
 
+echo pwd:
+srun pwd
 echo which python:
 srun which python
-echo which conda:
-srun which conda
 
 WARM_START=False
 FILTER=True
