@@ -486,6 +486,7 @@ class ALVLM(TrainerX):
         else:
             MODE = "none"
         if self.cfg.WANDB_PROJECT_NAME:
+            os.environ["WANDB__SERVICE_WAIT"] = "300"
             wandb.init(
                 project = self.cfg.WANDB_PROJECT_NAME,
                 entity=self.cfg.WANDB_ENTITY,
