@@ -13,6 +13,11 @@ source /home/jin749/.bashrc
 conda activate pcb
 config=/home/jin749/jinpcb/sbatch/failed2.csv
 
+echo which python:
+srun which python
+echo which conda:
+srun which conda
+
 WARM_START=False
 FILTER=True
 FILTER_LR=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $3}' $config)

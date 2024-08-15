@@ -13,6 +13,10 @@ source /home/jin749/.bashrc
 conda activate pcb
 config=/home/jin749/jinpcb/sbatch/failed.csv
 
+echo which python:
+srun which python
+echo which conda:
+srun which conda
 
 WARM_START=False
 FILTER=True
