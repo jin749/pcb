@@ -490,7 +490,7 @@ class ALVLM(TrainerX):
             wandb.init(
                 project = self.cfg.WANDB_PROJECT_NAME,
                 entity=self.cfg.WANDB_ENTITY,
-                group = os.path.dirname(self.cfg.OUTPUT_DIR),
+                group = os.path.join(*self.cfg.OUTPUT_DIR.split('/')[1:-1]),
                 name = self.cfg.OUTPUT_DIR,
                 config={
                     "DATASET": self.cfg.DATASET.NAME,
