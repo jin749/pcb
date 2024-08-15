@@ -11,6 +11,7 @@
 #SBATCH -p A5000                    # partition requested
 #SBATCH -a 1-6                    # job array index values
 config=sbatch/failed.csv
+conda activate pcb
 
 
 WARM_START=False
