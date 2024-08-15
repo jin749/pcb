@@ -1,10 +1,12 @@
 #!/bin/bash
 
 #SBATCH -J nowarm_filterlr_big      # name of job
-#SBATCH -c 4                        # number of cpus required per task
+#SBATCH -c 8                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
 #SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
 #SBATCH -o /home/jin749/jinpcb/sbatch/slogs/%x_%A_%a.out    # file for batch script's standard output
+#SBATCH --mail-type=BEGIN,END
+#SBATCH --mail-user=jin749@postech.ac.kr
 
 #SBATCH --mem-per-gpu=40G           # memory required per allocated GPU
 #SBATCH -t 0-16:00:00               # time limit
@@ -14,10 +16,13 @@ source /home/jin749/.bashrc
 conda activate pcb
 config=/home/jin749/jinpcb/sbatch/failed2.csv
 
-echo pwd:
-srun pwd
-echo which python:
-srun which python
+echo JOB_ID: $SLURM_JOB_ID_$SLURM_ARRAY_TASK_ID && echo
+echo pwd: 
+pwd && echo
+echo which python: 
+which python && echo
+echo wandb login --verify: 
+wandb login --verify && echo
 
 WARM_START=False
 FILTER=True
