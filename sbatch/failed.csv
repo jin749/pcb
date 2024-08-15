@@ -1,0 +1,6 @@
+oxford_flowers,entropy,0.01,1
+oxford_flowers,entropy,0.01,2
+oxford_flowers,entropy,0.01,3
+oxford_flowers,coreset,0.01,1
+oxford_flowers,coreset,0.01,2
+oxford_flowers,coreset,0.01,3
