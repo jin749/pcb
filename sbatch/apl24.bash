@@ -1,6 +1,17 @@
 #!/bin/bash
 
+#SBATCH -J nowarm_filterlr_small    # name of job
+#SBATCH -c 4                        # number of cpus required per task
+#SBATCH --gres=gpu:1                # number of gpus required
+#SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
+#SBATCH -o /home/jin749/jinpcb/sbatch/slogs/%x_%A_%a.out    # file for batch script's standard output
+
+#SBATCH --mem-per-gpu=24G           # memory required per allocated GPU
+#SBATCH -t 0-05:00:00               # time limit
+#SBATCH -p A5000                    # partition requested
+#SBATCH -a 1-6                    # job array index values
 config=sbatch/failed.csv
+
 
 WARM_START=False
 FILTER=True
@@ -15,26 +26,16 @@ ALMETHOD=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $2}'
 MODE=AS
 SEED=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $4}' $config)
 
+WANDB_PROJECT_NAME=${ALMETHOD}_warm${WARM_START}_filter${FILTER}
+WANDB_ENTITY=apl_postech
+
+
 DATA=/home/jin749/DATA
 
 TRAINER=ALVLM
 CTP="end"  # class token position (end or middle)
 NCTX=16  # number of context tokens
 SHOTS=-1  # number of shots (1, 2, 4, 8, 16)
-
-WANDB_PROJECT_NAME=${ALMETHOD}_warm${WARM_START}_filter${FILTER}
-WANDB_ENTITY=apl_postech
-
-#SBATCH -J ${WANDB_PROJECT_NAME}_${DATASET}    # name of job
-#SBATCH -c 4                        # number of cpus required per task
-#SBATCH -a 1-6                    # job array index values
-#SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
-#SBATCH -t 0-05:00:00               # time limit
-#SBATCH -o /home/jin749/jinpcb/sbatch/slogs/%x_%A_%a.out    # file for batch script's standard output
-#SBATCH -p A5000                    # partition requested
-
-#SBATCH --mem-per-gpu=24G           # memory required per allocated GPU
-#SBATCH --gres=gpu:1                # number of gpus required
 
 
 DIR=output/${DATASET}/${TRAINER}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_OPTIM_NAME}${FILTER_LR}_filtermethod${ALMETHOD_FOR_FILTER}/seed${SEED}
