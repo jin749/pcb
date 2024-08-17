@@ -3,7 +3,7 @@
 #SBATCH -J fairMode_unfairTest_big      # name of job
 #SBATCH -c 8                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
-#SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
+#SBATCH -D /home/jin749/fairunfairpcb      # set working directory for batch script
 #SBATCH -o sbatch/slogs/%x_%A_%a.out    # file for batch script's standard output
 #SBATCH --mail-type=BEGIN,END
 #SBATCH --mail-user=jin749@postech.ac.kr
