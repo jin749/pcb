@@ -30,6 +30,9 @@ import wandb
 import contextlib
 import sys
 import os
+from yacs.config import CfgNode as CN
+from trainers import coop
+from dassl.engine import build_trainer
 
 _tokenizer = _Tokenizer()
 
@@ -90,6 +93,7 @@ class PromptLearner(nn.Module):
         prompt_prefix = " ".join(["X"] * n_ctx)
         
         classnames = [name.replace("_", " ") for name in classnames]
+        self.n_class_desc = []
         if cfg.TRAINER.COOPAL.ASPATH:
             with open(f"descriptors/descriptors_{cfg.TRAINER.COOPAL.ASPATH}", "r") as f:
                 desc_dict = json.load(f)
@@ -98,6 +102,7 @@ class PromptLearner(nn.Module):
             name_lens, prompts = [], []
             for name in classnames:
                 name = name.lower()
+                self.n_class_desc.append(len(desc_dict[name]))
                 for desc in desc_dict[name]:
                     name_lens.append(len(_tokenizer.encode(f"{name}, which is/has {desc}")))
                     prompts.append(prompt_prefix + " " + f"{name}, which is/has {desc}.")
@@ -110,6 +115,7 @@ class PromptLearner(nn.Module):
             name_lens, prompts = [], []
             for name in classnames:
                 name = name.lower()
+                self.n_class_desc.append(len(desc_dict[name]))
                 for desc in desc_dict[name]:
                     name_lens.append(len(_tokenizer.encode(f"{name}, which is/has {desc}")))
                     prompts.append(prompt_prefix + " " + f"{name}, which is/has {desc}.")
@@ -130,7 +136,8 @@ class PromptLearner(nn.Module):
         self.register_buffer("token_prefix", embedding[:, :1, :])  # SOS
         self.register_buffer("token_suffix", embedding[:, 1 + n_ctx :, :])  # CLS, EOS
 
-        self.n_cls = embedding.size(0)
+        #self.n_cls = embedding.size(0) # TODO: !! AS에선 이게 193이 됨. CSC=True 해서 parameter갯수가 엄청 많아짐.. 
+        self.n_cls = n_cls
         self.n_ctx = n_ctx
         self.tokenized_prompts = tokenized_prompts  # torch.Tensor
         self.name_lens = name_lens
@@ -162,9 +169,15 @@ class PromptLearner(nn.Module):
         self.ctx = nn.Parameter(ctx_vectors)  # to be optimized
 
     def forward(self):
-        ctx = self.ctx
-        if ctx.dim() == 2:
-            ctx = ctx.unsqueeze(0).expand(self.n_cls, -1, -1)
+        if self.ctx.dim() == 2:
+            d = sum(self.n_class_desc) if self.n_class_desc else self.n_cls
+            ctx = self.ctx.unsqueeze(0).expand(d, -1, -1)
+        elif self.ctx.dim() == 3 and self.n_class_desc:
+            for i, (v, n) in enumerate(zip(self.ctx, self.n_class_desc)):
+                if i == 0:
+                    ctx = v.expand(n, -1, -1)
+                else:
+                    ctx = torch.cat((ctx, v.expand(n, -1, -1)), dim=0)
 
         prefix = self.token_prefix
         suffix = self.token_suffix
@@ -270,18 +283,11 @@ class CustomCLIP(nn.Module):
         
         self.logit_scale = clip_model.logit_scale
         self.dtype = clip_model.dtype
-        self.n_class_desc=[]
+        self.n_class_desc= self.prompt_learner.n_class_desc
         self.n_cls = len(classnames)
         self.cfg = cfg
 
-        if desc_file is not None:
-            with open(f"descriptors/descriptors_{desc_file}", "r") as f:
-                desc_dict = json.load(f)
-                desc_dict = dict((k.lower(), v) for k,v in desc_dict.items())
-            classnames = [name.replace("_", " ") for name in classnames]
-            for name in classnames:
-                name = name.lower()
-                self.n_class_desc.append(len(desc_dict[name]))
+
 
         self.weighted_sum_weight = weighted_sum_weight
         self.weighted_sum = WeightedSumOfLogits(self.n_class_desc, self.dtype, self.weighted_sum_weight)
@@ -375,10 +381,10 @@ class ALVLM(TrainerX):
         self.sched = build_lr_scheduler(self.optim, cfg.OPTIM)
         self.register_model(f"prompt_learner", self.model.prompt_learner, self.optim, self.sched)
 
-        filter_optim_cfg = get_filter_optim_cfg(cfg)
-        self.filter_optim = build_optimizer(self.model.weighted_sum, filter_optim_cfg)
-        self.filter_sched = build_lr_scheduler(self.filter_optim, filter_optim_cfg)
-        self.register_model("weighted_sum", self.model.weighted_sum, self.filter_optim, self.filter_sched)
+        # filter_optim_cfg = get_filter_optim_cfg(cfg)
+        # self.filter_optim = build_optimizer(self.model.weighted_sum, filter_optim_cfg)
+        # self.filter_sched = build_lr_scheduler(self.filter_optim, filter_optim_cfg)
+        # self.register_model("weighted_sum", self.model.weighted_sum, self.filter_optim, self.filter_sched)
 
         self.scaler = GradScaler() if cfg.TRAINER.COOP.PREC == "amp" else None
 
@@ -587,21 +593,32 @@ class ALVLM(TrainerX):
             self.before_train(weighted_sum_weight) # build model
 
             print("\n\n=== Start training ===")
-            if torch.cuda.device_count() > 1:
-                model_for_eval = self.model.module
-            else:
-                model_for_eval = self.model
+            # if torch.cuda.device_count() > 1:
+            #     model_for_eval = self.model.module
+            # else:
+            #     model_for_eval = self.model
 
-            print_filter(model_for_eval)
+            # print_filter(model_for_eval)
             for self.epoch in range(self.start_epoch, self.max_epoch):
                 self.before_epoch()
                 self.run_epoch()
-                self.after_epoch()
-            self.after_train()
+                self.after_epoch()      
+                
+            
+            # Test above trained prompt on the CoOp trainer
+            #self.after_train()
+            coop_cfg = CN(self.cfg.copy())
+            coop_cfg.TRAINER.NAME = "CoOp"
+            coop = build_trainer(coop_cfg)
+            coop.build_model()
+            coop.load_model(self.cfg.OUTPUT_DIR, epoch=self.epoch+1)
+            coop.test()
+            self.acc.append(coop.test())
+            
 
             print("\n\n=== End training ===")
-            print_filter(model_for_eval)
-            weighted_sum_weight = model_for_eval.weighted_sum.w.detach()
+            # print_filter(model_for_eval)
+            # weighted_sum_weight = model_for_eval.weighted_sum.w.detach()
 
             print("\nTraining time for {}-th round: {:.2f} seconds".format(i, time.time() - start))
 

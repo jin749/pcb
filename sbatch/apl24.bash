@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -J nowarm_filterlr_small2    # name of job
+#SBATCH -J fair_AS_AE_small    # name of job
 #SBATCH -c 8                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
 #SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
@@ -14,7 +14,7 @@
 #SBATCH -a 1-108                      # job array index values
 source /home/jin749/.bashrc
 conda activate pcb
-config=/home/jin749/jinpcb/sbatch/config24.csv
+config=/home/jin749/jinpcb/sbatch/apl24.csv
 
 echo JOB_ID: ${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID} && echo
 echo pwd: 
@@ -25,8 +25,8 @@ echo wandb login --verify:
 wandb login --verify && echo
 
 WARM_START=False
-FILTER=True
-FILTER_LR=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $3}' $config)
+FILTER=False
+FILTER_LR=0.0
 FILTER_OPTIM_NAME=sgd
 ALMETHOD_FOR_FILTER=False
 CSC=True
@@ -34,10 +34,10 @@ CSC=True
 DATASET=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $1}' $config)
 CFG=vit_b32
 ALMETHOD=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $2}' $config)
-MODE=AS
+MODE=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $3}' $config)
 SEED=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $4}' $config)
 
-WANDB_PROJECT_NAME=${ALMETHOD}_warm${WARM_START}_filter${FILTER}
+WANDB_PROJECT_NAME=${ALMETHOD}_Fair${MODE}_warm${WARM_START}_filter${FILTER}
 WANDB_ENTITY=apl_postech
 
 
@@ -49,10 +49,11 @@ NCTX=16  # number of context tokens
 SHOTS=-1  # number of shots (1, 2, 4, 8, 16)
 
 
-DIR=output/${DATASET}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_OPTIM_NAME}${FILTER_LR}_f-method${ALMETHOD_FOR_FILTER}/seed${SEED}
+DIR=output/${DATASET}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_modeFair${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_OPTIM_NAME}${FILTER_LR}_f-method${ALMETHOD_FOR_FILTER}/seed${SEED}
 if [ -d "$DIR" ]; then
     echo "Oops! The results exist at ${DIR} (so skip this job)"
 elif [ "$MODE" = "AS" ]; then 
+    echo "AS"
     python train.py \
         --root ${DATA} \
         --seed ${SEED} \
@@ -75,6 +76,7 @@ elif [ "$MODE" = "AS" ]; then
         WANDB_ENTITY ${WANDB_ENTITY} \
         TRAINER.COOPAL.GAMMA 0.1
 elif [ "$MODE" = "AE" ]; then 
+    echo "AE"
     python train.py \
         --root ${DATA} \
         --seed ${SEED} \
