@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -J fair_AS_AE_small    # name of job
+#SBATCH -J fairMode_fairTest_small    # name of job
 #SBATCH -c 8                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
 #SBATCH -D /home/jin749/jinpcb      # set working directory for batch script

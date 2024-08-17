@@ -485,7 +485,7 @@ class ALVLM(TrainerX):
     def train(self):
         MODE = None
         TARGET_ROUND = 8
-        FAIR_TEST = False
+        FAIR_TEST = True
         if self.cfg.TRAINER.COOPAL.AEPATH:
             MODE = "AE"
         elif self.cfg.TRAINER.COOPAL.ASPATH:
