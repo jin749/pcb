@@ -485,6 +485,7 @@ class ALVLM(TrainerX):
     def train(self):
         MODE = None
         TARGET_ROUND = 8
+        FAIR_TEST = False
         if self.cfg.TRAINER.COOPAL.AEPATH:
             MODE = "AE"
         elif self.cfg.TRAINER.COOPAL.ASPATH:
@@ -504,6 +505,7 @@ class ALVLM(TrainerX):
                     "BACKBONE": self.cfg.MODEL.BACKBONE.NAME,
                     "ALMETHOD": self.cfg.TRAINER.COOPAL.METHOD,
                     "MODE": MODE,
+                    "FAIR_TEST": FAIR_TEST,
                     "WARM_START": self.cfg.TRAINER.COOPAL.WARM_START,
                     "FILTER": self.cfg.TRAINER.COOPAL.FILTER,
                     "FILTER_OPTIM_NAME": self.cfg.TRAINER.COOPAL.FILTER_OPTIM_NAME,
@@ -606,14 +608,18 @@ class ALVLM(TrainerX):
                 
             
             # Test above trained prompt on the CoOp trainer
-            #self.after_train()
-            coop_cfg = CN(self.cfg.copy())
-            coop_cfg.TRAINER.NAME = "CoOp"
-            coop = build_trainer(coop_cfg)
-            coop.build_model()
-            coop.load_model(self.cfg.OUTPUT_DIR, epoch=self.epoch+1)
-            coop.test()
-            self.acc.append(coop.test())
+            if FAIR_TEST:
+                print("\n\n=== Fair test ===")
+                coop_cfg = CN(self.cfg.copy())
+                coop_cfg.TRAINER.NAME = "CoOp"
+                coop = build_trainer(coop_cfg)
+                coop.build_model()
+                coop.load_model(self.cfg.OUTPUT_DIR, epoch=self.epoch+1)
+                self.acc.append(coop.test())
+                self.close_writer()
+            else:
+                print("\n\n=== Unfair test ===")
+                self.after_train()
             
 
             print("\n\n=== End training ===")
