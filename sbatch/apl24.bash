@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -J fair_AS_AE_small    # name of job
+#SBATCH -J fairMode_unfairTest_small    # name of job
 #SBATCH -c 8                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
 #SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
@@ -49,7 +49,7 @@ NCTX=16  # number of context tokens
 SHOTS=-1  # number of shots (1, 2, 4, 8, 16)
 
 
-DIR=output/${DATASET}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_modeFair${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_OPTIM_NAME}${FILTER_LR}_f-method${ALMETHOD_FOR_FILTER}/seed${SEED}
+DIR=output/${DATASET}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_Fair${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_OPTIM_NAME}${FILTER_LR}_f-method${ALMETHOD_FOR_FILTER}/seed${SEED}
 if [ -d "$DIR" ]; then
     echo "Oops! The results exist at ${DIR} (so skip this job)"
 elif [ "$MODE" = "AS" ]; then 
