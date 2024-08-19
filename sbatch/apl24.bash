@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -J fairMode_unfairTest_small    # name of job
+#SBATCH -J fairMode_unfairTest_small2    # name of job
 #SBATCH -c 8                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
 #SBATCH -D /home/jin749/fairunfairpcb      # set working directory for batch script
@@ -9,9 +9,9 @@
 #SBATCH --mail-user=jin749@postech.ac.kr
 
 #SBATCH --mem-per-gpu=24G           # memory required per allocated GPU
-#SBATCH -t 0-05:00:00               # time limit
+#SBATCH -t 0-07:00:00               # time limit
 #SBATCH -p A5000                    # partition requested
-#SBATCH -a 1-108                      # job array index values
+#SBATCH -a 1-9                      # job array index values
 source /home/jin749/.bashrc
 conda activate pcb
 config=sbatch/apl24.csv
