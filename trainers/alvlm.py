@@ -113,6 +113,18 @@ class PromptLearner(nn.Module):
                 for desc in desc_dict[name]:
                     name_lens.append(len(_tokenizer.encode(f"{name}, which is/has {desc}")))
                     prompts.append(prompt_prefix + " " + f"{name}, which is/has {desc}.")
+        
+        elif cfg.TRAINER.COOPAL.CBMPATH:
+            with open(f"descriptors/descriptors_{cfg.TRAINER.COOPAL.CBMPATH}", "r") as f:
+                desc_dict = json.load(f)
+                desc_dict = dict((k.lower(), v) for k,v in desc_dict.items())
+                
+            name_lens, prompts = [], []
+            for name in classnames:
+                name = name.lower()
+                for desc in desc_dict[name]:
+                    name_lens.append(len(_tokenizer.encode(f"{name}, which is/has {desc}")))
+                    prompts.append(prompt_prefix + " " + f"{name}, which is/has {desc}.")
                     
         else:
             name_lens = [len(_tokenizer.encode(name)) for name in classnames]
@@ -226,41 +238,27 @@ class PromptLearner(nn.Module):
             raise ValueError
 
         return prompts
-    
 
-class WeightedSumOfLogits(nn.Module):
-    def __init__(self, n_class_desc, dtype, weighted_sum_weight=None):
+class WeightMatrix(nn.Module):
+    def __init__(self, n_cls, n_class_desc, dtype):
         super().__init__()
-        self.n_class_desc = n_class_desc
-        
-        if weighted_sum_weight is None:
-            initial_weighted_sum_weight = []
-            for n in self.n_class_desc:
-                initial_weighted_sum_weight.extend([1/n] * n)
-            self.w = nn.Parameter(torch.tensor(initial_weighted_sum_weight, dtype=dtype))
-
-        else:
-            self.w = nn.Parameter(weighted_sum_weight)
-            
-    def forward(self, augmented_logits):
-        weighted_sum_logits = []
+        init_weight = torch.zeros((n_cls, sum(n_class_desc))).type(dtype)
         start = 0
-        for n in self.n_class_desc:
-            same_class_logits = augmented_logits[:, start: start + n]
-            same_class_softmaxed_weight = F.softmax(self.w[start: start + n], dim=0)
-            weighted_sum_logit = same_class_logits @ same_class_softmaxed_weight
-
-            weighted_sum_logits.append(weighted_sum_logit)
+        for i, n in enumerate(n_class_desc):
+            init_weight[i, start:start+n] = 1.0
             start += n
-        
-        weighted_sum_logits = torch.stack(weighted_sum_logits, dim=1)
-        
-        return weighted_sum_logits
-    
+        self.mat = nn.Parameter(init_weight)
 
+    def forward(self, text_features, image_features):
+        mat = F.softmax(self.mat, dim=-1)
+        logits = mat @ text_features
+        logits = image_features @ logits.t()
+        #logits = augmented_logits @ mat.t()
+
+        return logits
 
 class CustomCLIP(nn.Module):
-    def __init__(self, cfg, classnames, clip_model, desc_file=None, weighted_sum_weight=None):
+    def __init__(self, cfg, classnames, clip_model, desc_file=None):
         super().__init__()
         
         self.prompt_learner = PromptLearner(cfg, classnames, clip_model)
@@ -283,10 +281,8 @@ class CustomCLIP(nn.Module):
                 name = name.lower()
                 self.n_class_desc.append(len(desc_dict[name]))
 
-        self.weighted_sum_weight = weighted_sum_weight
-        self.weighted_sum = WeightedSumOfLogits(self.n_class_desc, self.dtype, self.weighted_sum_weight)
+        self.asso_mat = WeightMatrix(self.n_cls, self.n_class_desc, self.dtype)
         
-            
         
     def forward(self, image, get_feature=False):
         image_features = self.image_encoder(image.type(self.dtype))
@@ -295,6 +291,13 @@ class CustomCLIP(nn.Module):
         tokenized_prompts = self.tokenized_prompts
     
         text_features = self.text_encoder(prompts, tokenized_prompts)
+        
+        if self.cfg.TRAINER.COOPAL.CBMPATH:
+            logits = self.asso_mat(text_features, image_features)
+            if get_feature:
+                return logits, image_features / image_features.norm(dim=-1, keepdim=True)
+            else:
+                return logits
         
         if self.cfg.TRAINER.COOPAL.AEPATH:
             tmp = []
@@ -311,15 +314,12 @@ class CustomCLIP(nn.Module):
         logits = logit_scale * image_features @ text_features.t()
         
         if self.cfg.TRAINER.COOPAL.ASPATH: 
-            if self.cfg.TRAINER.COOPAL.FILTER: # TODO: filter
-                logits = self.weighted_sum(logits)
-            else:
-                tmp = [] 
-                start = 0
-                for n in self.n_class_desc:
-                    tmp.append(torch.sum(logits[:, start:start+n], dim=1)/n)
-                    start += n
-                logits = torch.stack(tmp, dim=1)
+            tmp = [] 
+            start = 0
+            for n in self.n_class_desc:
+                tmp.append(torch.sum(logits[:, start:start+n], dim=1)/n)
+                start += n
+            logits = torch.stack(tmp, dim=1)
 
         if get_feature:
             return logits, image_features
@@ -341,7 +341,7 @@ class ALVLM(TrainerX):
     def check_cfg(self, cfg):
         assert cfg.TRAINER.COOP.PREC in ["fp16", "fp32", "amp"]
 
-    def build_model(self, weighted_sum_weight=None):
+    def build_model(self):
         cfg = self.cfg
         classnames = self.dm.dataset.classnames
 
@@ -354,16 +354,18 @@ class ALVLM(TrainerX):
 
         print("Building custom CLIP")
         if cfg.TRAINER.COOPAL.ASPATH:
-            self.model = CustomCLIP(cfg, classnames, clip_model, desc_file=cfg.TRAINER.COOPAL.ASPATH, weighted_sum_weight=weighted_sum_weight)
+            self.model = CustomCLIP(cfg, classnames, clip_model, desc_file=cfg.TRAINER.COOPAL.ASPATH)
         elif cfg.TRAINER.COOPAL.AEPATH:
             self.model = CustomCLIP(cfg, classnames, clip_model, desc_file=cfg.TRAINER.COOPAL.AEPATH)
+        elif cfg.TRAINER.COOPAL.CBMPATH:
+            self.model = CustomCLIP(cfg, classnames, clip_model, desc_file=cfg.TRAINER.COOPAL.CBMPATH)
         else:
             self.model = CustomCLIP(cfg, classnames, clip_model)
         #print(self.model)
         
         print("Turning off gradients in both the image and the text encoder")
         for name, param in self.model.named_parameters():
-            if "prompt_learner" not in name and "weighted_sum" not in name:
+            if "prompt_learner" not in name and "asso_mat" not in name:
                 param.requires_grad_(False)
 
         if cfg.MODEL.INIT_WEIGHTS:
@@ -375,10 +377,12 @@ class ALVLM(TrainerX):
         self.sched = build_lr_scheduler(self.optim, cfg.OPTIM)
         self.register_model(f"prompt_learner", self.model.prompt_learner, self.optim, self.sched)
 
-        filter_optim_cfg = get_filter_optim_cfg(cfg)
-        self.filter_optim = build_optimizer(self.model.weighted_sum, filter_optim_cfg)
-        self.filter_sched = build_lr_scheduler(self.filter_optim, filter_optim_cfg)
-        self.register_model("weighted_sum", self.model.weighted_sum, self.filter_optim, self.filter_sched)
+
+        if cfg.TRAINER.COOPAL.CBMPATH:
+            cbm_optim_cfg = get_cbm_optim_cfg(cfg)
+            self.cbm_optim = build_optimizer(self.model.asso_mat, cbm_optim_cfg)
+            self.cbm_sched = build_lr_scheduler(self.cbm_optim, cbm_optim_cfg)
+            self.register_model("weight_matrix", self.model.asso_mat, self.cbm_optim, self.cbm_sched)
 
         self.scaler = GradScaler() if cfg.TRAINER.COOP.PREC == "amp" else None
 
@@ -458,9 +462,9 @@ class ALVLM(TrainerX):
             # set strict=False
             self._models[name].load_state_dict(state_dict, strict=False)
     
-    def before_train(self, weighted_sum_weight=None):
+    def before_train(self):
         print("INITIALIZE the prompts weights")
-        self.build_model(weighted_sum_weight)
+        self.build_model()
         
     def after_train(self):
         print("Finish training")
@@ -483,6 +487,8 @@ class ALVLM(TrainerX):
             MODE = "AE"
         elif self.cfg.TRAINER.COOPAL.ASPATH:
             MODE = "AS"
+        elif self.cfg.TRAINER.COOPAL.CBMPATH:
+            MODE = "CBM"
         else:
             MODE = "none"
         if self.cfg.WANDB_PROJECT_NAME:
@@ -498,11 +504,8 @@ class ALVLM(TrainerX):
                     "BACKBONE": self.cfg.MODEL.BACKBONE.NAME,
                     "ALMETHOD": self.cfg.TRAINER.COOPAL.METHOD,
                     "MODE": MODE,
+                    "CBM_LR": self.cfg.TRAINER.COOPAL.CBM_LR,
                     "WARM_START": self.cfg.TRAINER.COOPAL.WARM_START,
-                    "FILTER": self.cfg.TRAINER.COOPAL.FILTER,
-                    "FILTER_OPTIM_NAME": self.cfg.TRAINER.COOPAL.FILTER_OPTIM_NAME,
-                    "FILTER_LR": self.cfg.TRAINER.COOPAL.FILTER_LR,
-                    "ALMETHOD_FOR_FILTER": self.cfg.TRAINER.COOPAL.ALMETHOD_FOR_FILTER,
                     "SEED": self.cfg.SEED,
                     "NUM_SHOTS": 1,
                     "TARGET_ROUND": TARGET_ROUND,
@@ -523,7 +526,7 @@ class ALVLM(TrainerX):
         n_cand = int(len(unlabeled_dst) * self.cfg.TRAINER.COOPAL.GAMMA) # 10% of entire dataset
         
         dataset._train_x = []
-        weighted_sum_weight = None
+        trained_asso_mat = None
         for i in range(TARGET_ROUND):
             start = time.time()
             if self.cfg.TRAINER.COOPAL.METHOD == "random" or (self.cfg.TRAINER.COOPAL.WARM_START == False) and i == 0:
@@ -540,20 +543,12 @@ class ALVLM(TrainerX):
                 idx = selector.select(n_cand)
 
             elif self.cfg.TRAINER.COOPAL.METHOD == "badge":
-                if self.cfg.TRAINER.COOPAL.ALMETHOD_FOR_FILTER:
-                    print("\n\n BADGE FOR FILTER \n\n")
-                    selector = F_BADGE(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
-                else:
-                    selector = BADGE(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
+                selector = BADGE(self.cfg, self.model, unlabeled_dst, U_index, dataset.get_num_classes(unlabeled_dst), self.device)
                 idx = selector.select(n_cand)
 
             elif self.cfg.TRAINER.COOPAL.METHOD == "coreset":
                 val_x = dataset._train_x.copy()
-                if self.cfg.TRAINER.COOPAL.ALMETHOD_FOR_FILTER:
-                    print("\n\n CORESET FOR FILTER \n\n")
-                    selector = F_Coreset(self.cfg, self.model, unlabeled_dst, U_index, val_x, dataset.get_num_classes(unlabeled_dst))
-                else:
-                    selector = Coreset(self.cfg, self.model, unlabeled_dst, U_index, val_x, dataset.get_num_classes(unlabeled_dst))
+                selector = Coreset(self.cfg, self.model, unlabeled_dst, U_index, val_x, dataset.get_num_classes(unlabeled_dst))
                 idx = selector.select(n_cand)
 
             else:
@@ -584,15 +579,20 @@ class ALVLM(TrainerX):
                 dataset_wrapper=None
             )   
 
-            self.before_train(weighted_sum_weight) # build model
+            self.before_train() # build model
 
             print("\n\n=== Start training ===")
             if torch.cuda.device_count() > 1:
-                model_for_eval = self.model.module
+                model = self.model.module
             else:
-                model_for_eval = self.model
+                model = self.model
 
-            print_filter(model_for_eval)
+            if self.cfg.TRAINER.COOPAL.CBMPATH:
+                if trained_asso_mat is not None:
+                    model.asso_mat.load_state_dict(trained_asso_mat.state_dict())
+                    print_mat(trained_asso_mat.state_dict()["mat"], self.dm.dataset.classnames, model.n_class_desc)
+
+            #print_filter(model)
             for self.epoch in range(self.start_epoch, self.max_epoch):
                 self.before_epoch()
                 self.run_epoch()
@@ -600,9 +600,12 @@ class ALVLM(TrainerX):
             self.after_train()
 
             print("\n\n=== End training ===")
-            print_filter(model_for_eval)
-            weighted_sum_weight = model_for_eval.weighted_sum.w.detach()
+            if self.cfg.TRAINER.COOPAL.CBMPATH:
+                trained_asso_mat = model.asso_mat
 
+            #print_filter(model_for_eval)
+            if self.cfg.TRAINER.COOPAL.CBMPATH:
+                print_mat(trained_asso_mat.state_dict()["mat"], self.dm.dataset.classnames, model.n_class_desc)
             print("\nTraining time for {}-th round: {:.2f} seconds".format(i, time.time() - start))
 
             if self.cfg.WANDB_PROJECT_NAME:
@@ -614,23 +617,21 @@ class ALVLM(TrainerX):
         print("=======================")    
 
 
-def get_filter_optim_cfg(cfg):
+def get_cbm_optim_cfg(cfg):
     from yacs.config import CfgNode as CN
 
-    filter_optim = CN(cfg.OPTIM)
-    filter_optim.NAME = cfg.TRAINER.COOPAL.FILTER_OPTIM_NAME
-
-    if cfg.TRAINER.COOPAL.FILTER_LR:
-        filter_optim.LR = cfg.TRAINER.COOPAL.FILTER_LR
-
+    cbm_optim = CN(cfg.OPTIM)
+    cbm_optim.NAME = "sgd"
+    if cfg.TRAINER.COOPAL.CBM_LR:
+        cbm_optim.LR = cfg.TRAINER.COOPAL.CBM_LR
     for k, v in cfg.OPTIM.items():
-        if k not in filter_optim.keys():
-            filter_optim[k] = v
+        if k not in cbm_optim.keys():
+            cbm_optim[k] = v
 
-    print("\n\nFilter Optimizer Config: ")
-    print(filter_optim)
+    print("\n\nCBM Optimizer Config: ")
+    print(cbm_optim)
 
-    return filter_optim
+    return cbm_optim
 
 
 def print_filter(model,num_of_displayed_class=10):
@@ -656,4 +657,13 @@ def print_filter(model,num_of_displayed_class=10):
         start += n
         displayed_class += 1
         if displayed_class >= num_of_displayed_class:
+            break
+
+def print_mat(mat, classnames, n_class_desc):
+    print("\n\n <Weight Matrix>")
+    print(classnames[:5])
+    print(n_class_desc[:5])
+    for i, row in enumerate(mat):
+        print(row[:sum(n_class_desc[:5])])
+        if i == 4:
             break
