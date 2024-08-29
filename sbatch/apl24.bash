@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -J nowarm_filterlr_small2    # name of job
+#SBATCH -J BS_small    # name of job
 #SBATCH -c 8                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
 #SBATCH -D /home/jin749/jinpcb      # set working directory for batch script
@@ -9,9 +9,9 @@
 #SBATCH --mail-user=jin749@postech.ac.kr
 
 #SBATCH --mem-per-gpu=24G           # memory required per allocated GPU
-#SBATCH -t 0-05:00:00               # time limit
+#SBATCH -t 1-00:00:00               # time limit
 #SBATCH -p A5000                    # partition requested
-#SBATCH -a 1-108                      # job array index values
+#SBATCH -a 1-54                      # job array index values
 source /home/jin749/.bashrc
 conda activate pcb
 config=/home/jin749/jinpcb/sbatch/config24.csv
@@ -25,10 +25,8 @@ echo wandb login --verify:
 wandb login --verify && echo
 
 WARM_START=False
-FILTER=True
-FILTER_LR=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $3}' $config)
-FILTER_OPTIM_NAME=sgd
-ALMETHOD_FOR_FILTER=False
+BS=True #
+BS_THRES=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $3}' $config)
 CSC=True
 
 DATASET=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $1}' $config)
@@ -37,9 +35,8 @@ ALMETHOD=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $2}'
 MODE=AS
 SEED=$(awk -F '[,]' -v task_id=$SLURM_ARRAY_TASK_ID 'NR==task_id {print $4}' $config)
 
-WANDB_PROJECT_NAME=${ALMETHOD}_warm${WARM_START}_filter${FILTER}
+WANDB_PROJECT_NAME=${ALMETHOD}_warm${WARM_START}_BS${BS}
 WANDB_ENTITY=apl_postech
-
 
 DATA=/home/jin749/DATA
 
@@ -49,7 +46,7 @@ NCTX=16  # number of context tokens
 SHOTS=-1  # number of shots (1, 2, 4, 8, 16)
 
 
-DIR=output/${DATASET}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}_filter${FILTER}_${FILTER_OPTIM_NAME}${FILTER_LR}_f-method${ALMETHOD_FOR_FILTER}/seed${SEED}
+DIR=output/${DATASET}/${CFG}_${SHOTS}shots/nctx${NCTX}_csc${CSC}_ctp${CTP}_al${ALMETHOD}_mode${MODE}_warm${WARM_START}_BS${BS}_${BS_THRES}/seed${SEED}
 if [ -d "$DIR" ]; then
     echo "Oops! The results exist at ${DIR} (so skip this job)"
 elif [ "$MODE" = "AS" ]; then 
@@ -67,10 +64,8 @@ elif [ "$MODE" = "AS" ]; then
         TRAINER.COOPAL.METHOD ${ALMETHOD} \
         TRAINER.COOPAL.ASPATH ${DATASET}.json \
         TRAINER.COOPAL.WARM_START ${WARM_START} \
-        TRAINER.COOPAL.FILTER ${FILTER} \
-        TRAINER.COOPAL.FILTER_LR ${FILTER_LR} \
-        TRAINER.COOPAL.FILTER_OPTIM_NAME ${FILTER_OPTIM_NAME} \
-        TRAINER.COOPAL.ALMETHOD_FOR_FILTER ${ALMETHOD_FOR_FILTER} \
+        TRAINER.COOPAL.BS ${BS} \
+        TRAINER.COOPAL.BS_THRES ${BS_THRES} \
         WANDB_PROJECT_NAME ${WANDB_PROJECT_NAME} \
         WANDB_ENTITY ${WANDB_ENTITY} \
         TRAINER.COOPAL.GAMMA 0.1
