@@ -3,7 +3,7 @@
 #SBATCH -J BS_big      # name of job
 #SBATCH -c 8                        # number of cpus required per task
 #SBATCH --gres=gpu:1                # number of gpus required
-#SBATCH -D /home/jin749/Projects/pcb_budget      # set working directory for batch script
+#SBATCH -D /home/jin749/Projects/pcb_budget/      # set working directory for batch script
 #SBATCH -o /home/jin749/Projects/pcb_budget/sbatch/slogs/%x_%A_%a.out    # file for batch script's standard output
 #SBATCH --mail-type=BEGIN,END
 #SBATCH --mail-user=jin749@postech.ac.kr
@@ -14,7 +14,7 @@
 #SBATCH -a 1-9                      # job array index values
 source /home/jin749/.bashrc
 conda activate pcb
-config=/home/jin749/jinpcb/sbatch/config40.csv
+config=/home/jin749/Projects/pcb_budget/sbatch/config40.csv
 
 echo JOB_ID: ${SLURM_JOB_ID}_${SLURM_ARRAY_TASK_ID} && echo
 echo pwd: 
